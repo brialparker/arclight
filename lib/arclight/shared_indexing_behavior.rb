@@ -64,16 +64,32 @@ module Arclight
     end
 
     def add_digital_content(prefix:, solr_doc:)
-      dao = ng_xml.xpath("#{prefix}/dao").to_a
-      return if dao.blank?
+      dao = ng_xml.xpath("#{prefix}/did/dao").to_a
+
+      return add_daogrp_content(prefix: prefix, solr_doc: solr_doc) if dao.blank?
       field_name = Solrizer.solr_name('digital_objects', :displayable)
       solr_doc[field_name] = digital_objects(dao)
     end
 
+    def add_daogrp_content(prefix:, solr_doc:)
+      daogrp=ng_xml.xpath("#{prefix}/did/daogrp/daoloc[@type='locator']").to_a
+      return if daogrp.blank?
+      field_name = Solrizer.solr_name('digital_objects', :displayable)
+      solr_doc[field_name] = digital_objectsgrp(daogrp)
+    end
+
+    def digital_objectsgrp(objects)
+      objects.map do |daogrp|
+        label = daogrp.attributes['title'].try(:value)
+        href = daogrp.attributes['href'].try(:value)
+        Arclight::DigitalObject.new(label: label, href: href).to_json
+      end
+    end
+
     def digital_objects(objects)
       objects.map do |dao|
-        label = dao.attributes['title'].try(:value) || dao.xpath('daodesc/p').try(:text)
-        href = (dao.attributes['href'] || dao.attributes['xlink:href']).try(:value)
+        label = dao.attributes['xlink:title'].try(:value) || dao.xpath('daodesc/p').try(:text)
+        href = dao.attributes['xlink:href'].try(:value)||dao.xpath('daoloc[@xlink:href]').try(:text)
         Arclight::DigitalObject.new(label: label, href: href).to_json
       end
     end
@@ -91,7 +107,7 @@ module Arclight
     end
 
     def online_content?
-      search('//dao[@href]').present?
+      search('//dao[@href]').present?||search('//daoloc[@href]').present?
     end
   end
 end
